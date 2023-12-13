@@ -1,6 +1,6 @@
 from  setuptools import setup, find_packages
 
-with open("PYPI.rst", "r") as f:
+with open('README.md') as f:
     long_description = f.read()
 
 setup(

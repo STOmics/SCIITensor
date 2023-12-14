@@ -67,7 +67,7 @@ def _cell_pairs_generate(cells:list, separator:str="_"):
 
 def interaction_matrix_process(interaction_matrix:pd.DataFrame,
                                cells:list,
-                               separator:str="_"
+                               separator:str="-"
                                ) -> tuple:
     '''
     Input

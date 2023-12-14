@@ -8,7 +8,7 @@ from .scii_circos import interaction_matrix_process
 
 def lr_link_grap_generate(interaction_matrix:pd.DataFrame,
                   cells:list,
-                  separator:str="_",
+                  separator:str="-",
                   reducer:int=3,
                   ) -> Graph:
     '''
@@ -49,7 +49,7 @@ def lr_link_grap_generate(interaction_matrix:pd.DataFrame,
 
 def grap_plot(interaction_matrix:pd.DataFrame,
               cells:list,
-              separator:str='_',
+              separator:str='-',
               layout_type:str='kk',
               save:str=None,
               **kwargs,

@@ -6,7 +6,7 @@ import igraph as ig
 from igraph import Graph
 from .scii_circos import interaction_matrix_process
 
-def lr_link_grap_generate(interaction_matrix:pd.DataFrame,
+def lr_link_graph_generate(interaction_matrix:pd.DataFrame,
                   cells:list,
                   separator:str="-",
                   reducer:int=3,
@@ -24,7 +24,7 @@ def lr_link_grap_generate(interaction_matrix:pd.DataFrame,
     '''
     #generate color palette for cells and links
     cell_palette = 'Set3'
-    cell_colors = dict(zip(cells, plt.get_cmap(cell_palette).colors[0:len(cells)]))
+    cell_colors = dict(zip(cells, [tuple(x[0:3]) for x in plt.get_cmap(cell_palette, len(cells)).colors]))
 
     #transfer matrix into igraph
     sectors, links, genes = interaction_matrix_process(interaction_matrix, cells, separator=separator)
@@ -34,22 +34,22 @@ def lr_link_grap_generate(interaction_matrix:pd.DataFrame,
     edges_index = [(vertices_dict[x[0]], vertices_dict[x[1]]) for x in links]
     lr_links = set([(x[0].split("-")[1], x[1].split("-")[1]) for x in links])
     lr_palette = "tab20"
-    link_color_palette = plt.get_cmap(lr_palette).colors[0:len(lr_links)]
+    link_color_palette = [tuple(x[0:3]) for x in plt.get_cmap(lr_palette, len(lr_links)).colors]
     link_colors = dict(zip(lr_links, link_color_palette))
     edges_color = [link_colors[(x[0].split("-")[1], x[1].split("-")[1])] for x in links]
 
     g = Graph(n=len(vertices), edges=edges_index, directed=True)
     g.vs['name'] = vertices
-    g.vs['label'] = [x.split("-")[1] for x in vertices]
+    g.vs['label'] = [x.split("-", 1)[1] for x in vertices]
     g.vs['color'] = vertices_color
-    g.vs['weight'] = [x/reducer for x in sectors.values()]
+    g.vs['weight'] = [x/reducer if x>reducer*5 else 5 for x in sectors.values()]
     g.es['weight'] = [x[2] for x in links]
     g.es['color'] = edges_color
     return g
 
 def grap_plot(interaction_matrix:pd.DataFrame,
               cells:list,
-              separator:str='-',
+              separator:str='_',
               layout_type:str='kk',
               save:str=None,
               **kwargs,
@@ -67,7 +67,7 @@ def grap_plot(interaction_matrix:pd.DataFrame,
         None
     '''
     
-    g = lr_link_grap_generate(interaction_matrix, cells, separator=separator)
+    g = lr_link_graph_generate(interaction_matrix, cells, separator=separator)
     cell_colors = dict(zip([x.split("-")[0] for x in g.vs['name']], g.vs['color']))
     link_colors = dict(zip([f"{x.source_vertex['label']}-{x.target_vertex['label']}" for x in g.es], g.es['color']))
 
@@ -81,7 +81,7 @@ def grap_plot(interaction_matrix:pd.DataFrame,
             vertex_label_angle=90,
             vertex_label_dist = 0,
             vertex_label_size = 8,
-            edge_width=[1, 3],
+            edge_width=[0.5, 4],
             edge_curved=0.2,
             edge_arrow_size=10,
             edge_arrow_width=5,

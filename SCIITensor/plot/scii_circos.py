@@ -140,21 +140,24 @@ def cells_lr_circos(interaction_matrix:pd.DataFrame,
 
     cell_groups = defaultdict(list)
     for key in sectors.keys():
-        cell, gene = key.split("-")
+        cell, gene = key.split("-", 1)
         cell_groups[cell].append(key)
     group_sizes = [len(value) for key, value in cell_groups.items()]
 
     #Generate the color palette for cells, genes and links
     cmap1 = plt.get_cmap('tab20b')
     cmap2 = plt.get_cmap('tab20c')
-    new_cmap = ListedColormap(cmap1.colors + cmap2.colors)
-    cell_color_palette = plt.get_cmap("Set3").colors[0:len(cells)]
+    
+    cell_color_palette = plt.get_cmap("Set3", len(cells)).colors
     cell_colors = dict(zip(cells, cell_color_palette))
 
-    gene_color_palette = new_cmap.colors[0:len(genes)]
-    gene_colors = dict(zip(genes, gene_color_palette))
-    lr_links = set([(x[0].split("-")[1], x[1].split("-")[1]) for x in links])
-    link_color_palette = new_cmap.colors[0:len(lr_links)]
+    new_cmap = ListedColormap(cmap1.colors + cmap2.colors, N=len(genes))
+    gene_color_palette = new_cmap.colors
+    gene_colors = dict(zip(sorted(list(genes)), gene_color_palette))
+
+    lr_links = sorted(list(set([(x[0].split("-", 1)[1], x[1].split("-", 1)[1]) for x in links])))
+    new_cmap = ListedColormap(cmap1.colors + cmap2.colors, N=len(lr_links))
+    link_color_palette = new_cmap.colors
     link_colors = dict(zip(lr_links, link_color_palette))
 
     spaces = calc_group_spaces(group_sizes, space_bw_group=10, space_in_group=1)
@@ -164,8 +167,8 @@ def cells_lr_circos(interaction_matrix:pd.DataFrame,
     #ColorCycler.set_cmap("Set3")
     for sector in circos.sectors:
         track = sector.add_track(r_lim=(90, 95))
-        track.axis(fc=gene_colors[sector.name.split("-")[1]])
-        #track.text(sector.name.split("-")[1], fontsize=5, r=92, orientation="vertical")
+        track.axis(fc=gene_colors[sector.name.split("-", 1)[1]])
+        #track.text(sector.name.split("-", 1)[1], fontsize=5, r=92, orientation="vertical")
 
     #ColorCycler.set_cmap("tab10")
     for cell, group in cell_groups.items():
@@ -176,7 +179,7 @@ def cells_lr_circos(interaction_matrix:pd.DataFrame,
 
     #Plot links
     for sender, receiver, value in links:
-        ligand, receptor = sender.split("-")[1], receiver.split("-")[1]
+        ligand, receptor = sender.split("-", 1)[1], receiver.split("-", 1)[1]
         circos.link((sender, sectors[sender]-value, sectors[sender]), (receiver, sectors[receiver]-value, sectors[receiver]), color=link_colors[(ligand, receptor)], direction=1)
         sectors[sender] -= value
         sectors[receiver] -= value
@@ -199,7 +202,7 @@ def cells_lr_circos(interaction_matrix:pd.DataFrame,
         scatter_handles.append(Line2D([], [], color=color, marker="o", label=gene, ms=6, ls="None"))
     scatter_legend = circos.ax.legend(
         handles=scatter_handles,
-        bbox_to_anchor=(1.4, 1.0),
+        bbox_to_anchor=(1.5, 1.0),
         fontsize=6,
         title="Gene",
         handlelength=2,

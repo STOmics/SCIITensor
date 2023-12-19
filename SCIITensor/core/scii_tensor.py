@@ -432,16 +432,17 @@ def SCII_Tensor(interactiontensor: InteractionTensor=None, rank: list=[8,8,8], r
     plot_top_heatmap(interactiontensor, pair='cc', top_n=top_n_cc, figsize = figsize, module_name='CellPair')
     plot_top_heatmap(interactiontensor, pair='lr', top_n=top_n_lr, figsize = figsize, module_name='LRPair')
 
-    num_TME_modules=rank[2]
+    # plt.figure(figsize=(num_TME_modules*5,5))
+    # for p in range(num_TME_modules):
+    #     plt.subplot(1, num_TME_modules, p+1)
+    #     sns.heatmap(pd.DataFrame(core[:,:,p]))
+    #     plt.title('TME module {}'.format(p))
+    #     plt.ylabel('CellPair module')
+    #     plt.xlabel('LRPair module')
+    # plt.savefig("core_heatmap.pdf")
+    
+    plot_core_heatmap(interactiontensor, num_TME_modules=rank[2], nrow=3, filename="core_heatmap.pdf")
 
-    plt.figure(figsize=(num_TME_modules*5,5))
-    for p in range(num_TME_modules):
-        plt.subplot(1, num_TME_modules, p+1)
-        sns.heatmap(pd.DataFrame(core[:,:,p]))
-        plt.title('TME module {}'.format(p))
-        plt.ylabel('CellPair module')
-        plt.xlabel('LRPair module')
-    plt.savefig("core_heatmap.pdf")
 
     tme_cluster = find_max_column_indices(factors[2])
     interactiontensor.tme_cluster = tme_cluster
@@ -835,6 +836,34 @@ def plot_tme_mean_intensity(interactiontensor: InteractionTensor=None,
         sns.heatmap(mean_mt, vmax=vmax, **kwargs)
         plt.title(f"TME{tme_module}_Cellpair{cellpair_module}_LRpair{lrpair_module}")
 
+def plot_core_heatmap(interactiontensor: InteractionTensor=None, num_TME_modules: int=None, nrow: int=3, filename: str="core_heatmap.pdf"):
+    """
+    Plot the core matrix.
+
+    Parameters
+    ----------
+    interactiontensor : InteractionTensor
+        The InteractionTensor of the spatial transcriptomics data.
+    num_TME_modules : int
+        numer of TME modules.
+    nrow : int
+        number of row to plot.
+    filename : str
+        filename to save.
+    """
+    core = interactiontensor.core
+    
+    subplots_per_row = num_TME_modules // nrow
+    remainder_subplots = num_TME_modules % nrow
+    plt.figure(figsize=(subplots_per_row*5, nrow*5))
+    for p in range(num_TME_modules):
+        plt.subplot(num_rows, subplots_per_row + remainder_subplots, p+1)
+        sns.heatmap(pd.DataFrame(core[:, :, p]))
+        plt.title('TME module {}'.format(p))
+        plt.ylabel('CellPair module')
+        plt.xlabel('LRPair module')
+    plt.tight_layout()  # Adjust layout to prevent overlapping
+    plt.savefig(filename)
 
 def merge_data(interactiontensor_list: list=None, patient_id: list=None) -> InteractionTensor:
     """

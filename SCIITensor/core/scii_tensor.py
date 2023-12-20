@@ -178,7 +178,7 @@ def build_SCII(interactiontensor: InteractionTensor=None, radius: int=200, coord
 
 
 def process_SCII(interactiontensor: InteractionTensor=None, 
-            bin_zero_remove: bool=True,
+            zero_remove: bool=True,
             log_data: bool=True) -> np.ndarray:
 
     """
@@ -203,48 +203,47 @@ def process_SCII(interactiontensor: InteractionTensor=None,
     lr_mt_list = interactiontensor.lr_mt_list
     final_mt = np.dstack(lr_mt_list)
 
-    if bin_zero_remove == True:
-        bin_zero_submatrix_indices = np.all(final_mt == 0, axis=(0,1))
-        logg.info(f"{sum(bin_zero_submatrix_indices)} window have zero intensity")
+    if zero_remove == True:
+        window_zero_indices = np.all(final_mt == 0, axis=(0,1))
+        lrpair_zero_indices = np.all(final_mt == 0, axis=(0,2))
+        cellpair_zero_indices = np.all(final_mt == 0, axis=(1,2))
+        
+        logg.info(f"{sum(window_zero_indices)} window, {sum(lrpair_zero_indices)} lrpair, {sum(cellpair_zero_indices)} cellpair have zero intensity")
+        
+        interactiontensor.zero_indices = [cellpair_zero_indices, lrpair_zero_indices, window_zero_indices]
+        
+        final_mt = final_mt[:, :, ~window_zero_indices]
+        final_mt = final_mt[:, ~lrpair_zero_indices, :]
+        final_mt = final_mt[~cellpair_zero_indices, :, :]
+        
+        cellpair = lr_mt_list[0].index[~cellpair_zero_indices]
+        interactiontensor.cellpair = cellpair
+    
+        lrpair = lr_mt_list[0].columns[~lrpair_zero_indices]
+        interactiontensor.lrpair = lrpair
+        
+        lr_mt_list_filter = []
+        for i in range(len(lr_mt_list)):
+            lr_mt_list_filter.append(lr_mt_list[i].loc[cellpair][lrpair])
+        lr_mt_list_filter = [k for k,v in zip(lr_mt_list_filter, ~window_zero_indices) if v]
+        interactiontensor.lr_mt_list_filter = lr_mt_list_filter
+        
+        indices = interactiontensor.indices
 
-#     if zero_remove:
+        indices_filter = [k for k,v in zip(indices, (~window_zero_indices).tolist()) if v]
+        interactiontensor.indices_filter
 
-#     cellpair_zero_submatrix_indices = np.all(final_mt == 0, axis=(1,2))
-#     lrpair_zero_submatrix_indices = np.all(final_mt == 0, axis=(0,2))
-#     bin_zero_submatrix_indices = np.all(final_mt == 0, axis=(0,1))
-
-#     zero_indices = [cellpair_zero_submatrix_indices, lrpair_zero_submatrix_indices, bin_zero_submatrix_indices]
-
-#     with open('zero_indices.pkl', 'wb') as f:
-#         pickle.dump(zero_indices, f)
-
-#     nonzero_submatrices = final_mt[:, :, ~bin_zero_submatrix_indices]
-#     nonzero_submatrices = nonzero_submatrices[~cellpair_zero_submatrix_indices, :, :]
-#     nonzero_submatrices = nonzero_submatrices[:, ~lrpair_zero_submatrix_indices, :]
-#     final_mt = nonzero_submatrices
-    interactiontensor.window_zero_indices = bin_zero_submatrix_indices
-
-    # with open("window_zero_indices.pkl", "wb") as f:
-    #     pickle.dump(bin_zero_submatrix_indices, f)
-
-    final_mt = final_mt[:, :, ~bin_zero_submatrix_indices]
-
-    cellpair = lr_mt_list[0].index
-    interactiontensor.cellpair = cellpair
-    # with open("cellpair.pkl", "wb") as f:
-    #     pickle.dump(cellpair, f)
-
-    lrpair = lr_mt_list[0].columns
-    interactiontensor.lrpair = lrpair
-    # with open("lrpair.pkl", "wb") as f:
-    #     pickle.dump(lrpair, f)
+    else:
+        interactiontensor.cellpair = lr_mt_list[0].index
+        interactiontensor.lrpair = lr_mt_list[0].columns
+        interactiontensor.zero_indices = []
+        interactiontensor.lr_mt_list_filter = lr_mt_list
+        interactiontensor.indices_filter = indices
 
     if log_data:
         final_mt = np.log1p(final_mt)
 
     interactiontensor.cci_matrix = final_mt
-    # with open("final_mt.pkl", "wb") as f:
-    #     pickle.dump(final_mt, f)
 
     time_end=time.time()
     logg.info(f"Finish processing LR matrix - time cost {(((time_end - time_start) / 60) / 60)} h")
@@ -450,13 +449,8 @@ def SCII_Tensor(interactiontensor: InteractionTensor=None, rank: list=[8,8,8], r
     # with open("tme_cluster.pkl", "wb") as f:
     #     pickle.dump(tme_cluster, f)
 
-    window_zero_indices = interactiontensor.window_zero_indices
 
-    indices = interactiontensor.indices
-
-    indices_filter = [k for k,v in zip(indices, (~window_zero_indices).tolist()) if v]
-
-    interactiontensor.indices_filter = indices_filter
+    indices_filter = interactiontensor.indices_filter
 
 #         with open("indices_filter.pkl", "wb") as f:
 #             pickle.dump(indices_filter, f)
@@ -465,7 +459,6 @@ def SCII_Tensor(interactiontensor: InteractionTensor=None, rank: list=[8,8,8], r
     adata.obs['TME_module'] = None
     for k,v in enumerate(tme_cluster):
         adata.obs['TME_module'].iloc[indices_filter[k]] = str(v)
-
 
     adata.obs.TME_module = adata.obs.TME_module.astype('category')
     adata.obs.TME_module = adata.obs.TME_module.cat.set_categories(np.arange(adata.obs.TME_module.cat.categories.astype('int').max()+1).astype('str'))
@@ -600,15 +593,16 @@ def SCII_Tensor_multiple(interactiontensor: InteractionTensor=None, rank: list=[
 
     num_TME_modules=rank[2]
 
-    plt.figure(figsize=(num_TME_modules*5,5))
-    for p in range(num_TME_modules):
-        plt.subplot(1, num_TME_modules, p+1)
-        sns.heatmap(pd.DataFrame(core[:,:,p]))
-        plt.title('TME module {}'.format(p))
-        plt.ylabel('CellPair module')
-        plt.xlabel('LRPair module')
-    plt.savefig("core_heatmap.pdf")
-
+    # plt.figure(figsize=(num_TME_modules*5,5))
+    # for p in range(num_TME_modules):
+    #     plt.subplot(1, num_TME_modules, p+1)
+    #     sns.heatmap(pd.DataFrame(core[:,:,p]))
+    #     plt.title('TME module {}'.format(p))
+    #     plt.ylabel('CellPair module')
+    #     plt.xlabel('LRPair module')
+    # plt.savefig("core_heatmap.pdf")
+    plot_core_heatmap(interactiontensor, num_TME_modules=rank[2], nrow=3, filename="core_heatmap.pdf")
+    
     tme_cluster = find_max_column_indices(factors[2])
     interactiontensor.tme_cluster = tme_cluster
     # with open("tme_cluster.pkl", "wb") as f:
@@ -641,24 +635,24 @@ def SCII_Tensor_multiple(interactiontensor: InteractionTensor=None, rank: list=[
 
         tme_module_idx = [v for k,v in zip(individual_patient, individual_module) if k == ids[i]]
 
-        adata_list[i].obs['TME_module_module'] = None
+        adata_list[i].obs['TME_meta_module'] = None
 
-        adata_list[i].obs['TME_module_module'] = adata_list[i].obs['TME_module'].map(dict(zip([str(x) for x in tme_module_idx], [str(x) for x in tme_cluster_idx])))
+        adata_list[i].obs['TME_meta_module'] = adata_list[i].obs['TME_module'].map(dict(zip([str(x) for x in tme_module_idx], [str(x) for x in tme_cluster_idx])))
 
-        adata_list[i].obs['TME_module_module'] =  adata_list[i].obs['TME_module_module'].astype('category')
+        adata_list[i].obs['TME_meta_module'] =  adata_list[i].obs['TME_meta_module'].astype('category')
 
         sc.settings.set_figure_params(dpi=150, facecolor='white', fontsize=14)
         # sc.pl.spatial(adata_list[i], color = 'TME_module', img_key=None, spot_size=20)
-        sc.pl.embedding(adata_list[i], color = 'TME_module_module', size=1, basis='spatial', save = f"{ids[i]}_TME_module.png"
+        sc.pl.embedding(adata_list[i], color = 'TME_meta_module', size=1, basis='spatial', save = f"{ids[i]}_TME_module.png"
                         , palette = color_map, title="TME_module")
 
         scv.set_figure_params('scvelo', dpi_save=300, fontsize=40, figsize=(8,8))
-        if len(adata_list[i].obs['TME_module_module'].cat.categories)>1:
-            scv.pl.scatter(adata_list[i], groups=[[c] for c in adata_list[i].obs['TME_module_module'].cat.categories], color='TME_module_module', 
+        if len(adata_list[i].obs['TME_meta_module'].cat.categories)>1:
+            scv.pl.scatter(adata_list[i], groups=[[c] for c in adata_list[i].obs['TME_meta_module'].cat.categories], color='TME_meta_module', 
                            ncols=4, basis='spatial', save = f"{ids[i]}_TME_module_split.png"
                            , palette = color_map)
         else:
-            scv.pl.scatter(adata_list[i], groups=[c for c in adata_list[i].obs['TME_module_module'].cat.categories], color='TME_module_module', basis='spatial', save = f"{ids[i]}_TME_module_split.png", palette = color_map)
+            scv.pl.scatter(adata_list[i], groups=[c for c in adata_list[i].obs['TME_meta_module'].cat.categories], color='TME_meta_module', basis='spatial', save = f"{ids[i]}_TME_module_split.png", palette = color_map)
 
     interactiontensor.adata_list_TME = adata_list
 
@@ -801,7 +795,7 @@ def plot_tme_mean_intensity(interactiontensor: InteractionTensor=None,
         Additional keyword arguments to pass to the sns.heatmap function.
     """
 
-    lr_mt_list = interactiontensor.lr_mt_list
+    lr_mt_list = interactiontensor.lr_mt_list_filter
     cellpair = interactiontensor.cellpair
     lrpair = interactiontensor.lrpair
     core = interactiontensor.core
@@ -855,9 +849,9 @@ def plot_core_heatmap(interactiontensor: InteractionTensor=None, num_TME_modules
     
     subplots_per_row = num_TME_modules // nrow
     remainder_subplots = num_TME_modules % nrow
-    plt.figure(figsize=(subplots_per_row*5, nrow*5))
+    plt.figure(figsize=(subplots_per_row*7, nrow*5))
     for p in range(num_TME_modules):
-        plt.subplot(num_rows, subplots_per_row + remainder_subplots, p+1)
+        plt.subplot(nrow, subplots_per_row + remainder_subplots, p+1)
         sns.heatmap(pd.DataFrame(core[:, :, p]))
         plt.title('TME module {}'.format(p))
         plt.ylabel('CellPair module')
@@ -882,46 +876,50 @@ def merge_data(interactiontensor_list: list=None, patient_id: list=None) -> Inte
         A new InteractionTensor instance containing merged data.
     """
     lr_mt_list = []
+    lr_mt_list_filter = []
     adata_list = []
     zero_indices_list = []
     tme_cluster_list = []
     indice_list = []
+    indice_filter_list = []
     for interactiontensor in interactiontensor_list:
         lr_mt_list.append(interactiontensor.lr_mt_list)
+        lr_mt_list_filter.append(interactiontensor.lr_mt_list_filter)
         adata_list.append(interactiontensor.adata)
         zero_indices_list.append(interactiontensor.window_zero_indices)
         tme_cluster_list.append(interactiontensor.tme_cluster)
-        indice_list.append(interactiontensor.indices_filter)
+        indice_list.append(interactiontensor.indices)
+        indice_filter_list.append(interactiontensor.indices_filter)
 
     tmp = InteractionTensor(adata_list)
 
-    common_columns = set(lr_mt_list[0][0].columns)
-    for i in range(len(lr_mt_list)):
-        common_columns = common_columns.intersection(set(lr_mt_list[i][0].columns))
-
+    common_columns = set(lr_mt_list_filter[0][0].columns)
+    for i in range(len(lr_mt_list_filter)):
+        common_columns = common_columns.intersection(set(lr_mt_list_filter[i][0].columns))
+    
+    common_rows = set(lr_mt_list_filter[0][0].index)
+    for i in range(len(lr_mt_list_filter)):
+        common_rows = common_rows.intersection(set(lr_mt_list_filter[i][0].index))
+        
     tmp.lrpair = list(common_columns)
+    tmp.cellpair = list(common_rows)
 
     # with open("lrpair.pkl", "wb") as f:
     #     pickle.dump(list(common_columns), f)
 
-    for i in range(len(lr_mt_list)):
-        for j in range(len(lr_mt_list[i])):
-            lr_mt_list[i][j] = lr_mt_list[i][j][list(common_columns)].loc[lr_mt_list[0][0].index]
-
-    cellpair = lr_mt_list[0][0].index
-    tmp.cellpair = cellpair
-    # with open("cellpair.pkl", "wb") as f:
-    #     pickle.dump(cellpair, f)
+    for i in range(len(lr_mt_list_filter)):
+        for j in range(len(lr_mt_list_filter[i])):
+            lr_mt_list_filter[i][j] = lr_mt_list_filter[i][j][list(common_columns)].loc[list(common_rows)]
 
     cci_matrix = []
-    for i in range(len(lr_mt_list)):
-        cci_matrix.append(np.dstack(lr_mt_list[i]))
+    for i in range(len(lr_mt_list_filter)):
+        cci_matrix.append(np.dstack(lr_mt_list_filter[i]))
 
     for i in range(len(cci_matrix)):
         cci_matrix[i] = np.log1p(cci_matrix[i])
 
-    for i in range(len(cci_matrix)):
-        cci_matrix[i] = cci_matrix[i][:, :, ~zero_indices_list[i]]
+    # for i in range(len(cci_matrix)):
+    #     cci_matrix[i] = cci_matrix[i][:, :, ~zero_indices_list[i]]
 
     tmp.cci_matrix_individual = cci_matrix
 
@@ -931,7 +929,7 @@ def merge_data(interactiontensor_list: list=None, patient_id: list=None) -> Inte
     # with open("tme_cluster_list.pkl", "wb") as f:
     #     pickle.dump(tme_cluster_list, f)
 
-    indice = [item for indice in indice_list for item in indice]
+    indice = [item for indice in indice_filter_list for item in indice]
 
     # with open("indices.pkl", "wb") as f:
     #     pickle.dump(indice, f)
